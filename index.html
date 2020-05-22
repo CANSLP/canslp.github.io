@@ -3,13 +3,764 @@
 <title>Processing.js Test</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/processing.js/1.4.8/processing.min.js"></script>
 <script type="application/processing" data-processing-target="pjs">
-  void setup(){
-    size(500,500);
+
+
+boolean hUP;
+boolean iUP;
+boolean hDOWN;
+boolean iDOWN;
+boolean hRIGHT;
+boolean iRIGHT;
+boolean hLEFT;
+boolean iLEFT;
+boolean hR;
+boolean iR;
+
+
+void uiUpdate(){
+  iUP = false;
+  iDOWN = false;
+  iRIGHT = false;
+  iLEFT = false;
+  iR = false;
+}
+
+void keyPressed(){
+  if(keyCode == 38 || keyCode == 87){
+      iUP = true;
+      hUP = true;
   }
-  void draw(){
-    background(0);
-    ellipse(250,250,50,50);
+  if(keyCode == 39 || keyCode == 68){
+      iRIGHT = true;
+      hRIGHT = true;
   }
+  if(keyCode == 37 || keyCode == 65){
+      iLEFT = true;
+      hLEFT = true;
+  }
+  if(keyCode == 40 || keyCode == 83){
+      iDOWN = true;
+      hDOWN = true;
+  }
+  if(keyCode == 82){
+    iR = true;
+    hR = true;
+  }
+}
+void keyReleased(){
+  if(keyCode == 38 || keyCode == 87){
+      hUP = false;
+  }
+  if(keyCode == 39 || keyCode == 68){
+      hRIGHT = false;
+  }
+  if(keyCode == 37 || keyCode == 65){
+      hLEFT = false;
+  }
+  if(keyCode == 40 || keyCode == 83){
+    hDOWN = false;
+  }
+  if(keyCode == 82){
+    hR = false;
+  }
+}
+
+
+
+float camX = 0;
+float camY = 0;
+float camS = 1;
+float camA = 0;
+float camtx = 0;
+float camty = 0;
+float camts = 1.5;
+float camta = 0;
+float camSpeed = 15;
+
+
+
+
+
+class Vert{
+  float x;
+  float y;
+  Vert(float x,float y){
+    this.x = x;
+    this.y = y;
+  }
+  Vert trans(float cx,float cy,float cs,float ca){
+    float a = angle(cx-x,cy-y);
+    float d = dist(cx-x,cy-y);
+    return new Vert((width/2)+(sin(a+ca+PI)*d*cs),(height/2)-(cos(a+ca+PI)*d*cs)); 
+  }
+}
+
+
+
+
+class Shape{
+  ArrayList<Vert> verts;
+  color c;
+  Shape(ArrayList<Vert> verts,color c){
+    this.verts = verts;
+    this.c = c;
+  }
+  void render(float cx,float cy,float cs,float ca){
+    noStroke();
+    fill(c);
+    beginShape();
+    for(int vi = 0;vi < verts.size();vi ++){
+      Vert v = verts.get(vi).trans(cx,cy,cs,ca);
+      vertex(v.x,v.y);
+    }
+    endShape();
+  }
+}
+class Dot{
+  Vert p;
+  float s;
+  color c;
+  Dot(Vert v,float s,color c){
+    this.p = v;
+    this.s = s;
+    this.c = c;
+  }
+  void update(float x,float y){
+    p = new Vert(x,y);
+  }
+  void render(float cx,float cy,float cs,float ca){
+    Vert t = p.trans(cx,cy,cs,ca);
+    stroke(c);
+    strokeWeight(s*cs);
+    point(t.x,t.y);
+  }
+}
+
+void drawStructs(float cx,float cy,float cs,float ca){
+  for(int si = 0;si < game.structs.size();si ++){
+    game.structs.get(si).shape.render(cx,cy,cs,ca);
+  }
+}
+
+
+
+
+void drawBalls(float cx,float cy,float cs,float ca){
+  for(int bi = 0;bi < game.balls.size();bi ++){
+    game.balls.get(bi).dot.render(cx,cy,cs,ca);
+  }
+  for(int ri = 0;ri < game.rain.size();ri ++){
+    game.rain.get(ri).ball.dot.render(cx,cy,cs,ca);
+  }
+  game.player.ball.dot.render(cx,cy,cs,ca);
+}
+void drawDots(float cx,float cy,float cs,float ca){
+  for(int di = 0;di < dots.size();di ++){
+    dots.get(di).render(cx,cy,cs,ca);
+  }
+  drawBalls(cx,cy,cs,ca);
+}
+
+
+
+
+void runCam(){
+   /*
+  camX=mouseX-(width/2);
+  camY=mouseY-(height/2);
+  */
+  
+  camtx = game.player.ball.x;
+  camty = game.player.ball.y;
+  
+  camX+=(camtx-camX)/camSpeed;
+  camY+=(camty-camY)/camSpeed;
+  camS+=(camts-camS)/camSpeed;
+  camA+=(camta-camA)/camSpeed;
+  //println(camX+" , "+camY);
+  
+}
+
+
+
+
+
+
+ArrayList<Vert> vs;
+ArrayList<Shape> shapes = new ArrayList<Shape>();
+ArrayList<Dot> dots = new ArrayList<Dot>();
+
+
+
+float dist(float x,float y){
+  return sqrt(pow(x,2)+pow(y,2));
+}
+float angle(float x,float y){
+  if(x<0){
+        return (3*PI/2)-atan(y/x);
+    } else {
+        return (PI/2)-atan(y/x);
+    }
+}
+
+
+
+boolean rbool;
+
+float[] crossSegs(float x1,float y1,float x2,float y2,float x3,float y3,float x4,float y4){
+    
+    float rx;
+    float ry;
+    rbool = false;
+    
+    //Divert methods for vertical lines
+    if(x1-x2==0){
+        if(x3-x4==0){
+        //Both
+            //Parallel
+            rbool = false;
+            return null;
+        } else {
+        //1
+            //Vertical Intersection
+            rx = x1;
+            ry = x1*((y3-y4)/(x3-x4))+(y3-(x3*((y3-y4)/(x3-x4))));
+            //Check segment overlap
+                if(!((rx>x1&&rx>x2)||(rx<x1&&rx<x2)||(rx>x3&&rx>x4)||(rx<x3&&rx<x4)||(ry>y1&&ry>y2)||(ry<y1&&ry<y2)||(ry>y3&&ry>y4)||(ry<y3&&ry<y4))){
+                    rbool = true;   
+                }
+        }
+        } else {
+        if(x3-x4==0){
+        //2
+            //Vertical Intersection
+            rx = x3;
+            ry = x3*((y1-y2)/(x1-x2))+(y1-(x1*((y1-y2)/(x1-x2))));
+            //Check segment overlap
+                if(!((rx>x1&&rx>x2)||(rx<x1&&rx<x2)||(rx>x3&&rx>x4)||(rx<x3&&rx<x4)||(ry>y1&&ry>y2)||(ry<y1&&ry<y2)||(ry>y3&&ry>y4)||(ry<y3&&ry<y4))){
+                    rbool = true;   
+                }
+        } else {
+        //None
+            //Check Parallel
+            if((y1-y2)/(x1-x2)==(y3-y4)/(x3-x4)){
+                //Parallel
+                rbool = false;
+                return null;
+            } else {
+                //Do normal intersection
+                rx = ((y3-(x3*((y3-y4)/(x3-x4))))-(y1-(x1*((y1-y2)/(x1-x2)))))/(((y1-y2)/(x1-x2))-((y3-y4)/(x3-x4)));
+                ry = rx*((y1-y2)/(x1-x2))+(y1-(x1*((y1-y2)/(x1-x2))));
+            }
+            
+                //Check segment overlap
+                if(!((rx>x1&&rx>x2)||(rx<x1&&rx<x2)||(rx>x3&&rx>x4)||(rx<x3&&rx<x4)||(ry>y1&&ry>y2)||(ry<y1&&ry<y2)||(ry>y3&&ry>y4)||(ry<y3&&ry<y4))){
+                    rbool = true;   
+                }
+        }
+    }
+    float[] r = {rx,ry};
+    return r;
+};
+
+
+boolean pInPoly(float x,float y,ArrayList<Vert> shape){
+  java.awt.Polygon p = new java.awt.Polygon();
+  for(int i = 0;i < shape.size();i ++){
+    p.addPoint((int)shape.get(i).x,(int)shape.get(i).y);
+  }
+  return p.contains(x,y);
+  
+}
+
+
+
+int TICK = 0;
+
+class Game{
+  
+  
+  class Material{
+    String physics;
+    color c;
+    float res;
+    float fric;
+    Material(String physics,color c,float res,float fric){
+      this.physics = physics;
+      this.c = c;
+      this.res = res;
+      this.fric = fric;
+    }
+  }
+  
+  class Struct{
+    ArrayList<Vert> vs;
+    Shape shape;
+    Material mat;
+    Struct(ArrayList<Vert> vs, Material mat){
+      this.vs = vs;
+      this.shape= new Shape(vs,mat.c);
+      this.mat = mat;
+    }
+  }
+  
+  class Ball{
+    float x;
+    float y;
+    float xv;
+    float yv;
+    float s;
+    float res;
+    float fric;
+    float wallAngle = 0;
+    boolean onGround = false;
+    float onWall = 0;
+    Dot dot;
+    Ball(float x,float y,float xv,float yv,float s,float res,float fric){
+      this.x=x;
+      this.y=y;
+      this.xv=xv;
+      this.yv=yv;
+      this.s=s;
+      this.res=res;
+      this.fric=fric;
+      this.dot = new Dot(new Vert(x,y),s,color(255,255,255));
+    }
+    int cStruct;
+    boolean collide(){
+      cStruct = -1;
+      boolean collision = false;
+          for(int si = 0;si < structs.size();si ++){
+            Struct s = structs.get(si);
+            if(s.mat.physics=="solid"){
+              ArrayList<Vert> vs = s.vs;
+              if(pInPoly(x,y,vs)){
+                collision = true;
+                cStruct = si;
+              }
+            }
+          }
+          return collision;
+    }
+    void moveX(float u,float va){
+      x+=sin(va)*u;
+      if(collide()){
+        y+=u;
+        if(collide()){
+          if(sin(va)>0){
+            onWall = structs.get(cStruct).mat.fric;
+          }
+          if(sin(va)<0){
+            onWall = -structs.get(cStruct).mat.fric;
+          }
+          y-=u;
+          x-=sin(va)*u;
+          xv*=-res;
+          yv*=structs.get(cStruct).mat.fric;
+        } else {
+        //println("SLOPE");
+        }
+      }
+    }
+    void moveY(float u,float va){
+      y+=cos(va)*u;
+      if(collide()){
+        y-=cos(va)*u;
+        if(cos(va)<0){
+          onGround = true;
+        }
+        yv*=-res;
+        xv*=structs.get(cStruct).mat.fric;
+      }
+    }
+    void run(){
+
+      //yv-=0.25;
+      
+      onGround = false;
+      onWall = 0;
+      cStruct = -1;
+      
+      float unit = 1;
+      float vd = dist(0,0,xv,yv);
+      float va = angle(xv,yv);
+
+
+      if(vd>0){
+        for(int i = 0;i < floor(vd/unit);i ++){
+          moveY(unit,va);
+          moveX(unit,va);
+        }
+        moveY(vd%unit,va);
+        moveX(vd%unit,va);
+      }
+      xv*=fric;
+      //yv*=fric;
+      
+      dot.update(x,y);
+    }
+    void addForce(float xf,float yf){
+      xv+=xf;
+      yv+=yf;
+    }
+    void setForce(float xf,float yf){
+      xv=xf;
+      yv=yf;
+    }
+    void setXv(float xf){
+      xv=xf;
+    }
+    void setYv(float yf){
+      yv=yf;
+    }
+    void setPos(float x,float y){
+      this.x = x;
+      this.y = y;
+    }
+    void setFric(float fric){
+     this.fric = fric; 
+    }
+  }
+  
+  
+  class Rain{
+    Ball ball;
+    float xv;
+    float yv;
+    Rain(float x,float y,float xv,float yv){
+      this.xv = xv;
+      this.yv = yv;
+      this.ball = new Ball(x,y,0,0,random(1,3),0.9,1);
+      ball.setForce(xv,yv);
+    }
+    void run(){
+      ball.addForce(0,-0.1);
+      ball.run();
+      if(ball.y<-100){
+        ball.setPos(player.ball.x+random(-300,300),1000);
+        ball.setForce(random(-xv,xv),random(-yv,yv));
+        ball.s=random(3,5);
+        ball.dot.update(ball.x,ball.y);
+      }
+      ball.s-=0.01;
+      if(ball.s<=0){
+        ball.setPos(player.ball.x+random(-300,300),1000);
+        ball.setForce(random(-xv,xv),random(-yv,yv));
+        ball.s=random(3,5);
+        ball.dot.update(ball.x,ball.y);
+      }
+      ball.dot.s=ball.s;
+    } 
+  }
+  
+  class Player{
+    
+    
+    
+    Ball ball;
+    Player(float x,float y){
+      this.ball = new Ball(x,y,0,0,10,0,0.9);
+    }
+    void run(){
+      float runPower = 0.25;
+      float jumpPower = 5;
+      float grav = -0.25;
+      
+      ball.addForce(0,grav);
+      
+      /*if(hUP){
+        ball.addForce(0,0.25);
+      }
+      if(hDOWN){
+        ball.addForce(0,-0.25);
+      }*/
+
+      if(ball.onGround){
+        if(hUP){
+          ball.yv=jumpPower;
+        }
+      } else {
+        runPower*=0.8; 
+      }
+      if(ball.onWall!=0){
+        if(hUP){
+          ball.setForce(ball.onWall*jumpPower*-1.1,jumpPower*0.85);
+        }
+      }
+      if(hRIGHT){
+        ball.addForce(runPower,0);
+      }
+      if(hLEFT){
+        ball.addForce(-runPower,0);
+      }
+      //println("v1: "+ball.xv+" , "+ball.yv);
+      ball.run();
+      
+      //println("ground: "+ball.onGround+" , wall: "+ball.onWall);
+      //println("v2: "+ball.xv+" , "+ball.yv);
+      //println("res: "+ball.res+" , fric: "+ball.fric);
+
+    }
+  }
+  
+  class Platform{
+    float x;
+    float y;
+    float w;
+    float h;
+    Material mat;
+    int si;
+    Platform(float x,float y,float w,float h,Material mat){
+      this.x=x;
+      this.y=y;
+      this.w=w;
+      this.h=h;
+      this.mat=mat;
+      genRect(x,y,w,h,mat);
+      si = structs.size()-1;
+    }
+    void updateStruct(){
+      ArrayList<Vert> vs = new ArrayList<Vert>();
+      vs.add(new Vert(x-w/2,y-h/2));
+      vs.add(new Vert(x-w/2,y+h/2));
+      vs.add(new Vert(x+w/2,y+h/2));
+      vs.add(new Vert(x+w/2,y-h/2));
+      structs.get(si).vs = vs;
+      structs.get(si).shape.verts = vs;
+    }
+    void move(float mx,float my){
+      float topBubble = 5;
+      
+      if(mx!=0){
+        x+=mx;
+        if(mat.physics=="solid"){
+          for(int bi = 0;bi < balls.size();bi ++){
+            if(balls.get(bi).x<x+w/2&&balls.get(bi).x>x-w/2){
+              if(balls.get(bi).y-topBubble<=y+h/2&&balls.get(bi).y>y-h/2){
+                /*if(mx>0){
+                  balls.get(bi).x=x+w/2;
+                }
+                if(mx<0){
+                  balls.get(bi).x=x-w/2;
+                }
+                */
+                balls.get(bi).x+=mx;
+                //println("push "+mx);
+              }
+            }
+          }
+        }
+      }
+      if(my!=0){
+        y+=my;
+        if(mat.physics=="solid"){
+          for(int bi = 0;bi < balls.size();bi ++){
+            if(balls.get(bi).x<x+w/2&&balls.get(bi).x>x-w/2){
+              if(balls.get(bi).y-topBubble<y+h/2&&balls.get(bi).y>y-h/2){
+                /*if(my>0){
+                  balls.get(bi).y=y+h/2;
+                }
+                if(my<0){
+                  balls.get(bi).y=y+h/2;
+                }*/
+                balls.get(bi).y+=my;
+              }
+            }
+          }
+        }
+      }
+      updateStruct();
+      //println(x+" , "+y);
+    }
+  }
+  
+  
+  void runBalls(){
+    for(int bi = 0;bi < balls.size();bi ++){
+      if(balls.get(bi)!=player.ball){
+        balls.get(bi).run();
+      }
+    }
+  }
+  
+  void runRain(){
+    for(int ri = 0;ri < rain.size();ri ++){
+      rain.get(ri).run();
+    }
+  }
+  void runPlatforms(){
+    plat1.move(0,-cos((float)TICK/50));
+    plat2.move(cos((float)TICK/50),0);
+    plat3.move(-cos((float)TICK/50),0);
+    plat4.move(sin((float)TICK/50),-cos((float)TICK/50));
+  }
+  
+  
+  Material ground = new Material("solid",color(175,175,175),0.5,1);
+  Material ice = new Material("solid",color(200,225,225),0,1.025);
+  Material mud = new Material("solid",color(150,100,75),0,0.8);
+  
+  ArrayList<Struct> structs = new ArrayList<Struct>();
+  ArrayList<Ball> balls = new ArrayList<Ball>();
+  ArrayList<Rain> rain = new ArrayList<Rain>();
+  Player player;
+  Platform plat1;
+  Platform plat2;
+  Platform plat3;
+  Platform plat4;
+  
+  ArrayList<Vert> vs;
+  
+  void genRect(float x,float y,float w,float h,Material mat){
+    vs = new ArrayList<Vert>();
+    vs.add(new Vert(x-w/2,y+h/2));
+    vs.add(new Vert(x+w/2,y+h/2));
+    vs.add(new Vert(x+w/2,y-h/2));
+    vs.add(new Vert(x-w/2,y-h/2));
+    structs.add(new Struct(vs,mat));
+  }
+  void genIsle(float x,float y,float w,float h,Material mat){
+    vs = new ArrayList<Vert>();
+    vs.add(new Vert(x-w/2,y+h/2));
+    vs.add(new Vert(x+w/2,y+h/2));
+    vs.add(new Vert(x+w/3,y-h/2));
+    vs.add(new Vert(x-w/3,y-h/2));
+    structs.add(new Struct(vs,mat));
+  }
+  void genHill(float x,float y,float w,float h,Material mat){
+    vs = new ArrayList<Vert>();
+    vs.add(new Vert(x-w/4,y+h/2));
+    vs.add(new Vert(x+w/4,y+h/2));
+    vs.add(new Vert(x+w/2,y-h/2));
+    vs.add(new Vert(x-w/2,y-h/2));
+    structs.add(new Struct(vs,mat));
+  }
+  void genPyramid(float x,float y,float w,float h,Material mat){
+    vs = new ArrayList<Vert>();
+    vs.add(new Vert(x,y+h/2));
+    vs.add(new Vert(x+w/2,y-h/2));
+    vs.add(new Vert(x-w/2,y-h/2));
+    structs.add(new Struct(vs,mat));
+  }
+  
+  
+  
+  void generate(String level){
+    if(level == "test"){
+      player = new Player(0,25);
+      
+
+      vs = new ArrayList<Vert>();
+      vs.add(new Vert(-100,0));
+      vs.add(new Vert(0,-25));
+      vs.add(new Vert(100,0));
+      vs.add(new Vert(75,-50));
+      vs.add(new Vert(-75,-50));
+      structs.add(new Struct(vs,ground));
+      vs = new ArrayList<Vert>();
+      vs.add(new Vert(0,40));
+      vs.add(new Vert(-10,50));
+      vs.add(new Vert(0,60));
+      vs.add(new Vert(10,50));
+      structs.add(new Struct(vs,ground));
+      
+      for(int i = 0;i < 10;i ++){
+        balls.add(new Ball(random(-width/2,width/2),random(-height/2,height/2),0,0,random(2,8),0,0.9));
+      }
+    }
+    
+    if(level == "collision test"){
+      player = new Player(0,25);
+      genIsle(0,-25,225,50,ground);
+      genIsle(100,50,50,25,ground);
+      genIsle(50,25,50,25,ground);
+      //genIsle(200,50,50,25,ground);
+      genIsle(400,50,200,25,ground);
+      genPyramid(450,75,90,30,ground);
+      genIsle(525,35,25,5,ground);
+      genIsle(600,0,200,25,ground);
+      genPyramid(600,25,50,30,ground);
+      genPyramid(675,50,25,80,ground);
+      genRect(-100,50,25,110,ground);
+      genRect(-25,100,25,75,ground);
+      genRect(-200,50,100,25,ground);
+      genRect(-250,200,25,200,ground);
+      genRect(-300,175,25,300,ground);
+      genRect(-150,300,100,25,ground);
+      genRect(-200,625,25,500,ground);
+      genRect(-100,600,25,500,ground);
+      genIsle(500,-150,300,25,ground);
+      
+      plat1 = new Platform(200,75,50,20,ground);
+      plat2 = new Platform(500,-125,25,50,ground);
+      plat3 = new Platform(500,-50,25,50,ground);
+      plat4 = new Platform(700,-100,50,20,ground);
+      
+      for(int i = 0;i < 100;i ++){
+        rain.add(new Rain(random(-500,500),1000,random(-5,5),random(-2,2)));
+      }
+    }
+    
+    if(level == "material test"){
+      player = new Player(0,25);
+      genHill(-125,-65,200,25,ice);
+      genRect(-175,0,25,200,ice);
+      genHill(125,-65,200,25,mud);
+      genRect(175,0,25,200,mud);
+      genIsle(0,-100,500,50,ground);
+    }
+    
+    balls.add(player.ball);
+    TICK = 0;
+  }
+  
+  
+  void run(){
+    TICK++;
+    player.run(); 
+    runRain();
+    runBalls();
+    runPlatforms();
+  }
+  
+  
+  
+}
+
+Game game;
+void setup(){
+  size(500,500);
+
+  
+  game = new Game();
+  game.generate("collision test");
+  
+}
+void draw(){
+  
+  if(iR){
+    game = new Game();
+    game.generate("collision test");
+
+  }
+  game.run();
+  runCam();
+  
+  background(0);
+  drawStructs(camX,camY,camS,camA);
+  drawDots(camX,camY,camS,camA);
+  
+  
+  uiUpdate();
+  
+  
+  
+}
+
+
+
+
+
 </script>
 </head>
 <body>
